@@ -24,6 +24,8 @@ import DisplayField from '@/components/ui/DisplayField';
 interface RequestDetailViewProps {
   request: ReimbursementRequest;
   role: UserRole;
+  userLevel?: string;
+  userId?: string;
   onBack: () => void;
   onUpdateStatus: (id: string, newStatus: ReimbursementRequest['status'], note?: string) => void;
   onEdit?: (request: ReimbursementRequest) => void;
@@ -32,10 +34,18 @@ interface RequestDetailViewProps {
 export default function RequestDetailView({ 
   request, 
   role, 
+  userLevel,
+  userId,
   onBack, 
   onUpdateStatus,
   onEdit
 }: RequestDetailViewProps) {
+
+  // Logic to determine if current user can approve
+  const isAwaitingDirector = request.status === 'Aguardando Diretor' || (request.status as string) === 'Pendente';
+  const canApproveDirector = userLevel === 'Diretor' && isAwaitingDirector && request.approverId === userId;
+  const canApproveFinance = role === 'admin' && request.status === 'Aguardando Financeiro';
+  const canApprove = canApproveDirector || canApproveFinance;
   
   const handlePrint = () => {
     window.print();
@@ -49,7 +59,7 @@ export default function RequestDetailView({
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 animate-fade-in-up">
+    <div className="max-w-6xl mx-auto pb-20 print:pb-0 animate-fade-in-up">
       {/* Cabeçalho de Ações (Escondido no Print) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 print:hidden">
         <button 
@@ -70,7 +80,7 @@ export default function RequestDetailView({
           
           {/* Botões de Ação Dinâmicos */}
           <div className="flex items-center gap-2">
-            {role === 'user' && (request.status === 'Rascunho' || request.status === 'Devolvido') && (
+            {role === 'user' && (request.status === 'Rascunho' || request.status === 'Devolvido') && request.userId === userId && (
               <button 
                 onClick={() => onEdit?.(request)}
                 className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl font-bold text-sm hover:bg-orange-100 transition-all"
@@ -79,7 +89,7 @@ export default function RequestDetailView({
               </button>
             )}
 
-            {role === 'admin' && request.status === 'Pendente' && (
+            {canApprove && (
               <>
                 <button 
                   onClick={() => onUpdateStatus(request.id, 'Rejeitado')}
@@ -97,7 +107,7 @@ export default function RequestDetailView({
                   onClick={() => onUpdateStatus(request.id, 'Aprovado')}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-500/20"
                 >
-                  <CheckCircle2 size={18} /> Aprovar Reembolso
+                  <CheckCircle2 size={18} /> {canApproveDirector ? 'Aprovar (Enviar Financeiro)' : 'Aprovar Reembolso'}
                 </button>
               </>
             )}
@@ -112,7 +122,7 @@ export default function RequestDetailView({
             <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight print:text-2xl leading-tight">{request.title}</h1>
             <StatusBadge status={request.status} />
           </div>
-          <p className="text-gray-400 font-mono text-xs sm:text-sm">ID: {request.id}</p>
+          <p className="text-gray-400 font-mono text-xs sm:text-sm">ID: {request.displayId || request.id}</p>
         </div>
         <div className="text-left sm:text-right bg-blue-50 sm:bg-transparent p-4 sm:p-0 rounded-2xl">
           <p className="text-[10px] font-black text-blue-400 sm:text-gray-400 uppercase tracking-widest mb-1">Total da Solicitação</p>
@@ -132,28 +142,42 @@ export default function RequestDetailView({
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <DisplayField label="Colaborador" value={request.user} />
-              <DisplayField label="Tipo" value={request.type} />
-              <DisplayField label="Projeto" value={request.project} />
-              <DisplayField label="Localidade" value={request.location} />
               <DisplayField label="Data da Solicitação" value={request.date} />
               <DisplayField label="Método de Pagamento" value={request.paymentMethod} />
             </div>
           </section>
 
+          {/* Informações Financeiras */}
+          <section className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-8 shadow-sm print:shadow-none print:border-none">
+            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Info size={20} className="text-purple-500" />
+              Informações Financeiras
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <DisplayField label="Filial" value={request.subsidiary || 'N/A'} />
+              <DisplayField label="Departamento" value={request.department || 'N/A'} />
+              <DisplayField label="Classe de Custo" value={request.chargeClass || 'N/A'} />
+              <DisplayField label="Mês Competência" value={request.competence || 'N/A'} />
+              <DisplayField label="Nº NF / Fatura" value={request.nfNumber || 'N/A'} />
+              <DisplayField label="Prev. Pagamento" value={request.paymentDate || 'N/A'} />
+            </div>
+          </section>
+
           {/* Tabela de Despesas (Resumo conforme protótipo) */}
-          <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm print:shadow-none print:border-none">
+          <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden print:overflow-visible shadow-sm print:shadow-none print:border-none">
             <div className="p-6 sm:p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <FileText size={20} className="text-blue-500" />
                 Resumo de Despesas
               </h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full text-left">
                 <thead className="bg-white text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50">
                   <tr>
                     <th className="px-8 py-5">ID / Ref</th>
-                    <th className="px-8 py-5">Descrição do Gasto</th>
+                    <th className="px-8 py-5">Estabelecimento</th>
+                    <th className="px-8 py-5">Data Recibo</th>
                     <th className="px-8 py-5 text-right">Valor</th>
                     <th className="px-8 py-5 text-center print:hidden">Anexo</th>
                   </tr>
@@ -162,7 +186,10 @@ export default function RequestDetailView({
                   {request.receipts.map((receipt, index) => (
                     <tr key={receipt.id} className="group hover:bg-gray-50/50 transition-colors">
                       <td className="px-8 py-5 text-[10px] font-mono text-gray-400 uppercase">REC-{index + 1}</td>
-                      <td className="px-8 py-5 text-sm font-bold text-gray-700">{receipt.description}</td>
+                      <td className="px-8 py-5 text-sm font-bold text-gray-700">{receipt.merchantName || '-'}</td>
+                      <td className="px-8 py-5 text-xs text-gray-500">
+                        {receipt.receiptDate ? new Date(receipt.receiptDate).toLocaleDateString('pt-BR') : '-'}
+                      </td>
                       <td className="px-8 py-5 text-sm font-black text-gray-900 text-right">{formatCurrency(parseFloat(receipt.value as string))}</td>
                       <td className="px-8 py-5 text-center print:hidden">
                         <a 
@@ -190,7 +217,7 @@ export default function RequestDetailView({
           <section className="space-y-6">
             <div className="flex items-center gap-3 py-2 border-b border-gray-100">
                <ImageIcon size={20} className="text-blue-500" />
-               <h3 className="text-lg font-black text-gray-800 tracking-tight uppercase tracking-wider text-xs">Dossiê de Comprovativos</h3>
+               <h3 className="text-lg font-black text-gray-800 tracking-tight uppercase tracking-wider text-xs">Comprovantes</h3>
             </div>
             
             <div className="space-y-8">
@@ -198,13 +225,13 @@ export default function RequestDetailView({
                  <div 
                    key={receipt.id} 
                    id={`anexo-${index + 1}`}
-                   className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                   className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow print:break-inside-avoid print:shadow-none print:border-gray-300"
                  >
                     {/* Header do Card de Anexo */}
                     <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
                        <div className="flex items-center gap-3">
                           <span className="px-2 py-1 bg-blue-600 text-white text-[9px] font-black rounded uppercase tracking-widest">Anexo {index + 1}</span>
-                          <h4 className="font-bold text-gray-800 text-sm">{receipt.description}</h4>
+                          <h4 className="font-bold text-gray-800 text-sm">{receipt.merchantName || 'Recibo'}</h4>
                        </div>
                        <div className="hidden sm:block">
                           <span className="text-[9px] font-mono text-gray-400 bg-white border border-gray-100 px-2 py-1 rounded">REF: {receipt.id}</span>
@@ -229,11 +256,25 @@ export default function RequestDetailView({
                        </div>
                     </div>
 
-                    {/* Rodapé do Card */}
+                     {/* Rodapé do Card */}
                     <div className="px-6 py-4 bg-white border-t border-gray-50">
-                       <p className="text-[10px] text-gray-500 flex items-center gap-1.5 font-medium leading-relaxed">
+                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                          <div>
+                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Estabelecimento</p>
+                             <p className="text-xs font-bold text-gray-700">{receipt.merchantName || 'Não informado'}</p>
+                          </div>
+                          <div>
+                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Data do Recibo</p>
+                             <p className="text-xs font-bold text-gray-700">{receipt.receiptDate ? new Date(receipt.receiptDate).toLocaleDateString('pt-BR') : 'Não informada'}</p>
+                          </div>
+                          <div>
+                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Valor Unitário</p>
+                             <p className="text-xs font-black text-blue-600">{formatCurrency(parseFloat(receipt.value as string))}</p>
+                          </div>
+                       </div>
+                       <p className="text-[10px] text-gray-400 flex items-center gap-1.5 font-medium leading-relaxed border-t border-gray-50 pt-4">
                           <Info size={12} className="text-blue-400" />
-                          Documento de suporte para a despesa de <span className="font-black text-gray-700">{formatCurrency(parseFloat(receipt.value as string))}</span> vinculada à Identificação <span className="font-mono font-bold text-gray-700">{receipt.id}</span>
+                          Documento de suporte para despesa vinculada à Identificação <span className="font-mono font-bold text-gray-700">{receipt.id}</span>
                        </p>
                     </div>
                  </div>

@@ -1,173 +1,202 @@
-import { ReimbursementRequest, RequestStatus } from '@/types';
-import { MOCK_REQUESTS } from '@/mocks/requests';
+import { ReimbursementRequest, RequestStatus, Receipt } from '@/types';
 
-const STORAGE_KEY = 'reembolsar_requests_v1';
-
-/**
- * Serviço para gestão de solicitações de reembolso.
- * Nesta fase 1, opera sobre o localStorage para simular persistência.
- * Na fase 2, será substituído por chamadas via Axios/Fetch para a API Node.js.
- */
 class RequestService {
-  private isInitialized = false;
+  private baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-  private init() {
-    if (typeof window === 'undefined') return;
-    if (this.isInitialized) return;
-
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(MOCK_REQUESTS));
+  async getRequests(role?: string, userId?: string, level?: string): Promise<ReimbursementRequest[]> {
+    const params = new URLSearchParams();
+    if (role) params.append('role', role);
+    if (userId) params.append('userId', userId);
+    if (level) params.append('level', level);
+    
+    try {
+      const response = await fetch(`${this.baseUrl}/requests?${params.toString()}`);
+      if (!response.ok) throw new Error('Erro ao listar solicitações');
+      return await response.json();
+    } catch (error) {
+      console.error('API Error (list):', error);
+      return [];
     }
-    this.isInitialized = true;
   }
 
-  private getStoredRequests(): ReimbursementRequest[] {
-    this.init();
-    if (typeof window === 'undefined') return MOCK_REQUESTS;
-    
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : MOCK_REQUESTS;
-  }
-
-  private saveRequests(requests: ReimbursementRequest[]) {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
-  }
-
-  /**
-   * Retorna todas as solicitações.
-   */
-  async getRequests(): Promise<ReimbursementRequest[]> {
-    return this.getStoredRequests();
-  }
-
-  /**
-   * Busca uma solicitação pelo ID.
-   */
   async getRequestById(id: string): Promise<ReimbursementRequest | undefined> {
-    const requests = this.getStoredRequests();
-    return requests.find(r => r.id === id);
+    try {
+      const response = await fetch(`${this.baseUrl}/requests/${id}`);
+      if (!response.ok) return undefined;
+      return await response.json();
+    } catch (error) {
+      console.error('API Error (details):', error);
+      return undefined;
+    }
   }
 
-  /**
-   * Cria uma nova solicitação.
-   */
   async createRequest(requestData: Partial<ReimbursementRequest>): Promise<ReimbursementRequest> {
-    const requests = this.getStoredRequests();
-    
-    const newRequest: ReimbursementRequest = {
-      ...requestData,
-      id: `SOL-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: requestData.status || 'Pendente',
-      date: requestData.date || new Date().toISOString().split('T')[0],
-      receipts: requestData.receipts || [],
-      history: requestData.history || [],
-      totalValue: requestData.totalValue || 0,
-      user: requestData.user || 'Usuário Desconhecido',
-      title: requestData.title || 'Nova Solicitação',
-      type: requestData.type || 'Outros',
-      project: requestData.project || 'Geral',
-      paymentMethod: requestData.paymentMethod || 'Outros',
-      location: requestData.location || 'N/A',
-      isMultiple: !!requestData.isMultiple,
-    } as ReimbursementRequest;
+    try {
+      const response = await fetch(`${this.baseUrl}/requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData),
+      });
 
-    const updated = [newRequest, ...requests];
-    this.saveRequests(updated);
-    return newRequest;
+      if (!response.ok) throw new Error('Erro ao criar solicitação');
+      const savedRequest = await response.json();
+
+      if (requestData.receipts && requestData.receipts.length > 0) {
+        for (const r of requestData.receipts) {
+          await this.createReceipt({
+            ...r,
+            solicitacaoId: savedRequest.id,
+            value: Number(r.value) || 0
+          });
+        }
+      }
+
+      return savedRequest;
+    } catch (error) {
+      console.error('API Error (create):', error);
+      throw error;
+    }
   }
 
-  /**
-   * Atualiza o status de uma solicitação e adiciona evento ao histórico.
-   */
+  async createReceipt(receiptData: Partial<Receipt>): Promise<Receipt> {
+    try {
+      const response = await fetch(`${this.baseUrl}/receipts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(receiptData),
+      });
+
+      if (!response.ok) throw new Error('Erro ao salvar recibo');
+      return await response.json();
+    } catch (error) {
+      console.error('API Error (createReceipt):', error);
+      throw error;
+    }
+  }
+
   async updateStatus(
     id: string, 
     newStatus: RequestStatus, 
-    user: string, 
-    note?: string
+    userName: string, 
+    note?: string,
+    userLevel?: string
   ): Promise<ReimbursementRequest | undefined> {
-    const requests = this.getStoredRequests();
-    const index = requests.findIndex(r => r.id === id);
+    try {
+      const response = await fetch(`${this.baseUrl}/requests/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, userName, note, userLevel }),
+      });
 
-    if (index === -1) return undefined;
-
-    const request = requests[index];
-    const updatedRequest: ReimbursementRequest = {
-      ...request,
-      status: newStatus,
-      history: [
-        {
-          id: Date.now(),
-          action: this.getActionMessage(newStatus),
-          date: new Date().toLocaleString('pt-BR'),
-          user,
-          note
-        },
-        ...request.history
-      ]
-    };
-
-    requests[index] = updatedRequest;
-    this.saveRequests(requests);
-    return updatedRequest;
-  }
-
-  /**
-   * Atualiza uma solicitação existente.
-   */
-  async updateRequest(id: string, updatedData: Partial<ReimbursementRequest>): Promise<ReimbursementRequest | undefined> {
-    const requests = this.getStoredRequests();
-    const index = requests.findIndex(r => r.id === id);
-
-    if (index === -1) return undefined;
-
-    const request = requests[index];
-    
-    // Se o status mudou de Devolvido/Rascunho para Pendente, adicionamos ao histórico
-    const statusChanged = updatedData.status && updatedData.status !== request.status;
-    
-    const updatedRequest: ReimbursementRequest = {
-      ...request,
-      ...updatedData,
-      history: statusChanged ? [
-        {
-          id: Date.now(),
-          action: this.getActionMessage(updatedData.status as RequestStatus),
-          date: new Date().toLocaleString('pt-BR'),
-          user: request.user,
-          note: 'Solicitação editada e reenviada.'
-        },
-        ...request.history
-      ] : request.history
-    };
-
-    requests[index] = updatedRequest;
-    this.saveRequests(requests);
-    return updatedRequest;
-  }
-
-  /**
-   * Remove uma solicitação (ex: remover rascunho).
-   */
-  async deleteRequest(id: string): Promise<boolean> {
-    const requests = this.getStoredRequests();
-    const filtered = requests.filter(r => r.id !== id);
-    
-    if (filtered.length === requests.length) return false;
-    
-    this.saveRequests(filtered);
-    return true;
-  }
-
-  private getActionMessage(status: RequestStatus): string {
-    switch (status) {
-      case 'Aprovado': return 'Solicitação Aprovada';
-      case 'Rejeitado': return 'Solicitação Rejeitada';
-      case 'Devolvido': return 'Devolvido para Correção';
-      case 'Pendente': return 'Enviado para Aprovação';
-      default: return 'Status Atualizado';
+      if (!response.ok) throw new Error('Erro ao atualizar status');
+      return await response.json();
+    } catch (error) {
+      console.error('API Error (status):', error);
+      return undefined;
     }
+  }
+
+  async updateRequest(id: string, updatedData: Partial<ReimbursementRequest>): Promise<ReimbursementRequest | undefined> {
+    try {
+      const response = await fetch(`${this.baseUrl}/requests/${id}/draft`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) throw new Error('Erro ao atualizar rascunho');
+      return await response.json();
+    } catch (error) {
+      console.error('API Error (update):', error);
+      return undefined;
+    }
+  }
+
+  async deleteRequest(id: string): Promise<boolean> {
+     console.warn('DELETE não implementado no backend');
+     return true;
+  }
+
+  async processReceipt(file: File): Promise<Partial<Receipt>> {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch(`${apiUrl}/receipts/process`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('Erro ao processar recibo');
+      return await response.json();
+    } catch (error) {
+      console.error('OCR Error:', error);
+      throw error;
+    }
+  }
+
+  async getSubsidiaries(): Promise<{ id: string, name: string }[]> {
+    const res = await fetch(`${this.baseUrl}/master/subsidiaries`);
+    return res.json();
+  }
+
+  async getDepartments(): Promise<{ id: string, name: string }[]> {
+    const res = await fetch(`${this.baseUrl}/master/departments`);
+    return res.json();
+  }
+
+  async getChargeClasses(): Promise<{ id: string, name: string }[]> {
+    const res = await fetch(`${this.baseUrl}/master/classes`);
+    return res.json();
+  }
+
+  async createSubsidiary(name: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/subsidiaries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    return res.json();
+  }
+
+  async createDepartment(name: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/departments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    return res.json();
+  }
+
+  async createChargeClass(name: string, subsidiaryId?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/classes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, subsidiaryId })
+    });
+    return res.json();
+  }
+
+  async deleteSubsidiary(id: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/subsidiaries/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  }
+
+  async deleteDepartment(id: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/departments/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  }
+
+  async deleteChargeClass(id: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/master/classes/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
   }
 }
 

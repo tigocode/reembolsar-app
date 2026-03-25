@@ -58,7 +58,9 @@ export default function RequestList({ requests, role, onOpenDetails }: RequestLi
               <tr key={req.id} className="hover:bg-blue-50/30 transition-all group cursor-default">
                 <td className="px-6 py-5 whitespace-nowrap">
                   <div className="flex flex-col">
-                    <span className="text-xs font-mono text-gray-400 group-hover:text-blue-500 transition-colors">{req.id}</span>
+                    <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md group-hover:bg-blue-100 group-hover:text-blue-700 transition-all uppercase tracking-tighter mb-0.5 w-fit">
+                      {req.displayId || req.id.substring(0, 8)}
+                    </span>
                     <span className="text-sm font-bold text-gray-800">{req.title}</span>
                   </div>
                 </td>
@@ -66,9 +68,9 @@ export default function RequestList({ requests, role, onOpenDetails }: RequestLi
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">
-                         {req.user.charAt(0)}
+                         {(req.user || 'Usuário').charAt(0).toUpperCase()}
                        </div>
-                       <span className="text-sm text-gray-600">{req.user}</span>
+                       <span className="text-sm text-gray-600">{req.user || 'Usuário Não Identificado'}</span>
                     </div>
                   </td>
                 )}

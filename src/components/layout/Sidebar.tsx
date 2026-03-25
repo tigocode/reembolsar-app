@@ -7,16 +7,16 @@ import {
   Settings, 
   BarChart2, 
   X,
-  LogOut
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserRole } from '@/types';
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
-  currentView: 'dashboard' | 'new_request' | 'details';
-  setCurrentView: (view: 'dashboard' | 'new_request' | 'details') => void;
+  currentView: 'dashboard' | 'new_request' | 'details' | 'master_data' | 'users' | 'manager_approvals';
+  setCurrentView: (view: 'dashboard' | 'new_request' | 'details' | 'master_data' | 'users' | 'manager_approvals') => void;
 }
 
 export default function Sidebar({ 
@@ -25,9 +25,9 @@ export default function Sidebar({
   currentView, 
   setCurrentView 
 }: SidebarProps) {
-  const { role, switchRole, logout } = useAuth();
+  const { role, user, logout } = useAuth();
 
-  const handleNavigate = (view: 'dashboard' | 'new_request' | 'details') => {
+  const handleNavigate = (view: 'dashboard' | 'new_request' | 'details' | 'master_data' | 'users' | 'manager_approvals') => {
     setCurrentView(view);
     setIsOpen(false);
   };
@@ -61,35 +61,57 @@ export default function Sidebar({
           </button>
           
           {role === 'user' && (
-            <button 
-              onClick={() => handleNavigate('new_request')} 
-              className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors
-                ${currentView === 'new_request' ? 'bg-blue-600 border-l-4 border-blue-400' : 'hover:bg-slate-800'}`}
-            >
-              <Plus className="mr-3" size={20} /> Nova Solicitação
-            </button>
+            <>
+              <button 
+                onClick={() => handleNavigate('new_request')} 
+                className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors
+                  ${currentView === 'new_request' ? 'bg-blue-600 border-l-4 border-blue-400' : 'hover:bg-slate-800'}`}
+              >
+                <Plus className="mr-3" size={20} /> Nova Solicitação
+              </button>
+
+              {user?.level === 'Diretor' && (
+                <button 
+                  onClick={() => handleNavigate('manager_approvals')} 
+                  className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors mt-1
+                    ${currentView === 'manager_approvals' ? 'bg-emerald-600 border-l-4 border-emerald-400' : 'hover:bg-slate-800'}`}
+                >
+                  <ShieldCheck className="mr-3" size={20} /> Minhas Aprovações
+                </button>
+              )}
+            </>
           )}
 
-          <div className="px-4 py-3 mt-8 text-xs text-slate-400 uppercase tracking-wider font-semibold">
-            Simulador de Perfil
-          </div>
-          <button 
-            onClick={() => { switchRole('user'); setCurrentView('dashboard'); }} 
-            className={`w-full flex items-center px-4 py-2 text-sm text-left transition-colors
-              ${role === 'user' ? 'text-white font-bold bg-slate-800/50' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Users className="mr-3" size={16} /> Visão Colaborador
-          </button>
-          <button 
-            onClick={() => { switchRole('admin'); setCurrentView('dashboard'); }} 
-            className={`w-full flex items-center px-4 py-2 text-sm text-left transition-colors
-              ${role === 'admin' ? 'text-white font-bold bg-slate-800/50' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Settings className="mr-3" size={16} /> Visão Financeiro
-          </button>
+          {role === 'admin' && (
+            <>
+              <div className="px-4 py-3 mt-4 text-xs text-slate-400 uppercase tracking-wider font-semibold">
+                Administração
+              </div>
+              <button 
+                onClick={() => handleNavigate('master_data')} 
+                className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors
+                  ${currentView === 'master_data' ? 'bg-blue-600 border-l-4 border-blue-400' : 'hover:bg-slate-800'}`}
+              >
+                <Settings className="mr-3" size={20} /> Tabelas Mestras
+              </button>
+              
+              <button 
+                onClick={() => handleNavigate('users')} 
+                className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors mt-1
+                  ${currentView === 'users' ? 'bg-blue-600 border-l-4 border-blue-400' : 'hover:bg-slate-800'}`}
+              >
+                <Users className="mr-3" size={20} /> Gestão de Usuários
+              </button>
+            </>
+          )}
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-800">
+          <div className="px-4 py-2 mb-2">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-tight">Logado como:</p>
+            <p className="text-sm text-blue-400 font-bold truncate">{user?.name}</p>
+            <p className="text-[10px] text-slate-500 font-medium">{user?.level || user?.role}</p>
+          </div>
           <button 
             onClick={logout}
             className="w-full flex items-center px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"

@@ -21,14 +21,14 @@ export const MOCK_REQUESTS: ReimbursementRequest[] = [
     receipts: [
       {
         id: 'REC-551',
-        reqId: 'SOL-1029',
+        solicitacaoId: 'SOL-1029',
         description: 'Táxi Aeroporto',
         value: 25.00,
         receiptUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=600&h=800',
       },
       {
         id: 'REC-552',
-        reqId: 'SOL-1029',
+        solicitacaoId: 'SOL-1029',
         description: 'Jantar Cliente',
         value: 125.50,
         receiptUrl: 'https://images.unsplash.com/photo-1607863680198-23d4b2565df0?auto=format&fit=crop&q=80&w=600&h=800',
@@ -53,7 +53,7 @@ export const MOCK_REQUESTS: ReimbursementRequest[] = [
     receipts: [
       {
         id: 'REC-553',
-        reqId: 'SOL-1030',
+        solicitacaoId: 'SOL-1030',
         description: 'Tinteiros e Papel',
         value: 45.00,
         receiptUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&q=80&w=600&h=800',
@@ -79,7 +79,7 @@ export const MOCK_REQUESTS: ReimbursementRequest[] = [
     receipts: [
       {
         id: 'REC-554',
-        reqId: 'SOL-1031',
+        solicitacaoId: 'SOL-1031',
         description: 'Gasolina 95',
         value: 35.00,
         receiptUrl: 'https://images.unsplash.com/photo-1611282238037-1d3fd3e6ab9c?auto=format&fit=crop&q=80&w=600&h=800',
@@ -111,13 +111,13 @@ export const MOCK_REQUESTS: ReimbursementRequest[] = [
     receipts: [
       {
         id: 'REC-555',
-        reqId: 'SOL-1032',
+        solicitacaoId: 'SOL-1032',
         description: 'Almoço restaurante',
         value: 55.00,
       },
       {
         id: 'REC-556',
-        reqId: 'SOL-1032',
+        solicitacaoId: 'SOL-1032',
         description: 'Estacionamento',
         value: 23.00,
       },

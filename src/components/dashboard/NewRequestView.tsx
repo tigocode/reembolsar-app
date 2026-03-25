@@ -11,10 +11,12 @@ import {
   Layers,
   Image as ImageIcon,
   Upload,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import { ReimbursementRequest, Receipt, RequestStatus } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { requestService } from '@/services/requestService';
 import { useEffect } from 'react';
 
 interface NewRequestViewProps {
@@ -30,34 +32,71 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
 
   // Estados do Formulário
   const [title, setTitle] = useState('');
-  const [type, setType] = useState('Viagem e Alojamento');
-  const [project, setProject] = useState('Operações Internas');
   const [paymentMethod, setPaymentMethod] = useState('Cartão Corporativo');
-  const [location, setLocation] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Novos campos financeiros (Fase 2)
+  const [subsidiary, setSubsidiary] = useState('');
+  const [department, setDepartment] = useState('');
+  const [chargeClass, setChargeClass] = useState('');
+  const [competence, setCompetence] = useState('');
+  const [nfNumber, setNfNumber] = useState('');
+  const [paymentDate, setPaymentDate] = useState('');
+
+  // Estados dos Dados Mestres
+  const [masterSubsidiaries, setMasterSubsidiaries] = useState<{id:string, name:string}[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<{id:string, name:string}[]>([]);
+  const [masterClasses, setMasterClasses] = useState<{id:string, name:string, subsidiaryId?:string}[]>([]);
+
+  // Efeito para carregar dados mestres
+  useEffect(() => {
+    const fetchMasterData = async () => {
+      try {
+        const [subs, depts, classes] = await Promise.all([
+          requestService.getSubsidiaries(),
+          requestService.getDepartments(),
+          requestService.getChargeClasses()
+        ]);
+        setMasterSubsidiaries(subs);
+        setMasterDepartments(depts);
+        setMasterClasses(classes);
+      } catch (error) {
+        console.error('Erro ao carregar tabelas mestras', error);
+      }
+    };
+    fetchMasterData();
+  }, []);
   
   // Lista de recibos
   const [receipts, setReceipts] = useState<Partial<Receipt>[]>([
-    { description: '', value: '', receiptUrl: '' }
+    { description: '', value: '', receiptUrl: '', merchantName: '', receiptDate: '' }
   ]);
+  const [isProcessingOcr, setIsProcessingOcr] = useState<number[]>([]);
 
   // Efeito para carregar dados em modo edição
   useEffect(() => {
     if (editingRequest) {
       setTitle(editingRequest.title);
-      setType(editingRequest.type);
-      setProject(editingRequest.project);
-      setPaymentMethod(editingRequest.paymentMethod);
-      setLocation(editingRequest.location);
+      setTitle(editingRequest.title);
+      setPaymentMethod(editingRequest.paymentMethod || 'Cartão Corporativo');
       setDate(editingRequest.date);
       setIsMultiple(editingRequest.isMultiple);
       setReceipts(editingRequest.receipts.map(r => ({ ...r })));
+      
+      // Novos campos
+      setSubsidiary(editingRequest.subsidiary || '');
+      setDepartment(editingRequest.department || '');
+      setChargeClass(editingRequest.chargeClass || '');
+      setCompetence(editingRequest.competence || '');
+      setNfNumber(editingRequest.nfNumber || '');
+      setPaymentDate(editingRequest.paymentDate || '');
+      
       setStep(2); // Vai direto para o formulário
     }
   }, [editingRequest]);
 
   const handleAddReceipt = () => {
-    setReceipts([...receipts, { description: '', value: '' }]);
+    setReceipts([...receipts, { description: '', value: '', merchantName: '', receiptDate: '' }]);
   };
 
   const handleRemoveReceipt = (index: number) => {
@@ -69,19 +108,52 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
   const updateReceipt = (index: number, field: keyof Receipt, val: any) => {
     const newReceipts = [...receipts];
     newReceipts[index] = { ...newReceipts[index], [field]: val };
+    
+    // Sincronizar merchantName com description se necessário (para compatibilidade com backend)
+    if (field === 'merchantName') {
+      newReceipts[index].description = val;
+    }
+    
     setReceipts(newReceipts);
   };
 
-  const handleFileUpload = (index: number, file: File) => {
+  const handleFileUpload = async (index: number, file: File) => {
     if (!file) return;
 
-    // Simulação de upload lendo como Base64 para persistência no localStorage
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      updateReceipt(index, 'receiptUrl', base64String);
-    };
-    reader.readAsDataURL(file);
+    // Adiciona o index à lista de processamento
+    setIsProcessingOcr(prev => [...prev, index]);
+
+    try {
+      // 1. Chamar OCR no Backend
+      const extractedData = await requestService.processReceipt(file);
+      
+      // 2. Atualizar estado com dados extraídos
+      const newReceipts = [...receipts];
+      newReceipts[index] = {
+        ...newReceipts[index],
+        receiptUrl: extractedData.receiptUrl,
+        value: extractedData.value?.toString() || newReceipts[index].value,
+        merchantName: extractedData.merchantName || newReceipts[index].merchantName,
+        receiptDate: extractedData.receiptDate ? new Date(extractedData.receiptDate).toISOString().split('T')[0] : newReceipts[index].receiptDate,
+        description: extractedData.merchantName 
+          ? `Despesa em ${extractedData.merchantName}` 
+          : newReceipts[index].description
+      };
+      setReceipts(newReceipts);
+    } catch (error) {
+      console.error('OCR Error:', error);
+      alert('Não foi possível extrair os dados automaticamente, mas o arquivo foi selecionado.');
+      
+      // Fallback: carregar apenas o preview localmente
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        updateReceipt(index, 'receiptUrl', base64String);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsProcessingOcr(prev => prev.filter(i => i !== index));
+    }
   };
 
   const calculateTotal = () => {
@@ -96,18 +168,24 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
 
     const newRequest: Partial<ReimbursementRequest> = {
       title,
-      type,
-      project,
       paymentMethod,
-      location,
       date,
       status,
       totalValue: calculateTotal(),
       isMultiple,
       user: user?.name || 'Usuário',
+      
+      // Novos campos financeiros
+      subsidiary,
+      department,
+      chargeClass,
+      competence,
+      nfNumber,
+      paymentDate,
+
       receipts: receipts.map((r, i) => ({
         ...r,
-        id: `REC-NEW-${Date.now()}-${i}`,
+        id: r.id || `REC-NEW-${Date.now()}-${i}`,
         value: parseFloat(r.value as string) || 0
       })) as Receipt[],
       history: [
@@ -179,53 +257,14 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
+              <div className="md:col-span-1">
                 <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Título da Solicitação</label>
                 <input 
                   type="text" 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Viagem de Negociações Q1 - Lisboa" 
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300 text-sm sm:text-base font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Tipo de Despesa</label>
-                <select 
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat text-sm sm:text-base font-medium"
-                >
-                  <option>Viagem e Alojamento</option>
-                  <option>Alimentação e Representação</option>
-                  <option>Transporte</option>
-                  <option>Material e Equipamento</option>
-                  <option>Outros</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Projeto</label>
-                <select 
-                  value={project}
-                  onChange={(e) => setProject(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.75rem_center] bg-no-repeat text-sm sm:text-base font-medium"
-                >
-                  <option>Operações Internas</option>
-                  <option>Conferência WebSummit</option>
-                  <option>Vendas Q1</option>
-                  <option>Parcerias Estratégicas</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Localidade</label>
-                <input 
-                  type="text" 
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Ex: Lisboa, Portugal" 
+                  placeholder="Ex: Reembolso Q1" 
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300 text-sm sm:text-base font-medium"
                 />
               </div>
@@ -240,12 +279,97 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
                 />
               </div>
             </div>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-8 border-b border-gray-50 bg-gray-50/20">
+            <h3 className="text-base sm:text-lg font-black text-gray-800 flex items-center gap-2">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] sm:text-xs font-bold">02</span>
+              Informações Financeiras
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-y-6 gap-x-4 mt-6 sm:mt-8">
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Filial</label>
+                <select 
+                  value={subsidiary}
+                  onChange={(e) => setSubsidiary(e.target.value)}
+                  className="w-full px-3 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat text-[11px] sm:text-xs font-bold truncate pr-8"
+                >
+                  <option value="">Selecione...</option>
+                  {masterSubsidiaries.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Departamento</label>
+                <select 
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full px-3 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat text-[11px] sm:text-xs font-bold truncate pr-8"
+                >
+                  <option value="">Selecione...</option>
+                  {masterDepartments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Classe / Conta</label>
+                <select 
+                  value={chargeClass}
+                  onChange={(e) => setChargeClass(e.target.value)}
+                  className="w-full px-3 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center] bg-no-repeat text-[11px] sm:text-xs font-bold truncate pr-8"
+                >
+                  <option value="">Selecione...</option>
+                  {masterClasses
+                    .filter(c => {
+                      if (!subsidiary) return true;
+                      const subId = masterSubsidiaries.find(s => s.name === subsidiary)?.id;
+                      return !c.subsidiaryId || c.subsidiaryId === subId;
+                    })
+                    .map(c => <option key={c.id} value={c.name}>{c.name}</option>)
+                  }
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Mês de Competência</label>
+                <input 
+                  type="text" 
+                  value={competence}
+                  onChange={(e) => setCompetence(e.target.value)}
+                  placeholder="MM/AAAA" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300 text-[11px] sm:text-xs font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Nº da NF (opcional)</label>
+                <input 
+                  type="text" 
+                  value={nfNumber}
+                  onChange={(e) => setNfNumber(e.target.value)}
+                  placeholder="000.000.000" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300 text-[11px] sm:text-xs font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Previsão Pagamento</label>
+                <input 
+                  type="date" 
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-[11px] sm:text-xs font-bold"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="p-5 sm:p-8">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">02</span>
+                <span className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs">03</span>
                 Itens de Despesa
               </h3>
               {isMultiple && (
@@ -258,21 +382,25 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
               )}
             </div>
 
-            <div className="space-y-3 sm:space-y-4">
+            <div className="space-y-4">
               {receipts.map((receipt, index) => (
-                <div key={index} className="flex flex-col lg:flex-row gap-4 p-5 sm:p-6 rounded-2xl border border-gray-100 bg-gray-50/30 relative group transition-all hover:border-blue-100 hover:bg-blue-50/10">
+                <div key={index} className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4 p-5 sm:p-6 rounded-2xl border border-gray-100 bg-gray-50/30 relative group transition-all hover:border-blue-100 hover:bg-blue-50/10">
+                  
+                  {/* Estabelecimento (Principal) */}
                   <div className="flex-1 min-w-0">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest leading-none">Descrição da Despesa</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest leading-none">Estabelecimento</label>
                     <input 
                       type="text" 
-                      value={receipt.description}
-                      onChange={(e) => updateReceipt(index, 'description', e.target.value)}
-                      placeholder="Ex: Almoço com cliente" 
+                      value={receipt.merchantName || ''}
+                      onChange={(e) => updateReceipt(index, 'merchantName', e.target.value)}
+                      placeholder="Ex: Starbucks, Posto Shell..." 
                       className="w-full px-4 py-2.5 bg-white rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all text-xs sm:text-sm font-medium"
                     />
                   </div>
-                  <div className="grid grid-cols-2 lg:flex gap-4">
-                    <div className="lg:w-32">
+
+                  <div className="flex flex-col sm:flex-row items-stretch lg:items-center gap-4 w-full lg:w-auto">
+                    {/* Valor */}
+                    <div className="sm:w-32">
                       <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest leading-none">Valor (R$)</label>
                       <input 
                         type="number" 
@@ -282,7 +410,20 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
                         className="w-full px-4 py-2.5 bg-white rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all text-xs sm:text-sm font-black text-blue-600"
                       />
                     </div>
-                    <div className="lg:w-48">
+
+                    {/* Data */}
+                    <div className="sm:w-36">
+                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest leading-none">Data do Recibo</label>
+                      <input 
+                        type="date" 
+                        value={receipt.receiptDate || ''}
+                        onChange={(e) => updateReceipt(index, 'receiptDate', e.target.value)}
+                        className="w-full px-4 py-2 bg-white rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all text-xs font-medium"
+                      />
+                    </div>
+
+                    {/* Comprovante */}
+                    <div className="sm:w-48">
                       <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest leading-none">Comprovante</label>
                       <div className="relative group/upload">
                         <input 
@@ -297,7 +438,12 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
                             : 'border-gray-200 bg-white group-hover/upload:border-blue-300'
                         }`}>
                           <div className="flex items-center justify-center gap-2">
-                            {receipt.receiptUrl ? (
+                            {isProcessingOcr.includes(index) ? (
+                              <>
+                                <Loader2 size={14} className="text-blue-500 animate-spin" />
+                                <span className="text-[10px] font-bold text-blue-600 uppercase">Processando...</span>
+                              </>
+                            ) : receipt.receiptUrl ? (
                               <>
                                 <Check size={14} className="text-green-600" />
                                 <span className="text-[10px] font-bold text-green-700 uppercase">Alterar Foto</span>
@@ -315,7 +461,7 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
                              <div className="w-8 h-8 rounded bg-gray-100 border border-gray-200 overflow-hidden">
                                 <img src={receipt.receiptUrl} alt="Preview" className="w-full h-full object-cover" />
                              </div>
-                             <span className="text-[9px] text-gray-400 truncate max-w-[80px]">imagem_carregada.jpg</span>
+                             <span className="text-[9px] text-gray-400 truncate max-w-[80px]">comprovante_ok.jpg</span>
                           </div>
                         )}
                       </div>
