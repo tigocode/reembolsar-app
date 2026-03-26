@@ -116,44 +116,48 @@ export default function RequestDetailView({
       </div>
 
       {/* Título e ID (Visível no Print) */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 border-b border-gray-100 pb-6 print:border-b-2 print:border-black gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 print:mb-4 border-b border-gray-100 pb-6 print:pb-3 print:border-b-2 print:border-black gap-4 print:gap-2">
         <div>
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight print:text-2xl leading-tight">{request.title}</h1>
+          <div className="flex flex-wrap items-center gap-3 print:gap-2 mb-2 print:mb-1">
+            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight print:text-xl leading-tight">{request.title}</h1>
             <StatusBadge status={request.status} />
           </div>
           <p className="text-gray-400 font-mono text-xs sm:text-sm">ID: {request.displayId || request.id}</p>
         </div>
         <div className="text-left sm:text-right bg-blue-50 sm:bg-transparent p-4 sm:p-0 rounded-2xl">
           <p className="text-[10px] font-black text-blue-400 sm:text-gray-400 uppercase tracking-widest mb-1">Total da Solicitação</p>
-          <p className="text-3xl sm:text-4xl font-black text-blue-600 print:text-black leading-none">{formatCurrency(request.totalValue)}</p>
+          <p className="text-3xl sm:text-4xl font-black text-blue-600 print:text-xl print:text-black leading-none">{formatCurrency(request.totalValue)}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print:gap-3 print:block">
         {/* Coluna Principal: Detalhes e Despesas */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="lg:col-span-2 space-y-8 print:space-y-3">
           
           {/* Informações Gerais */}
-          <section className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-8 shadow-sm print:shadow-none print:border-none">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <FileText size={20} className="text-blue-500" />
+          <section className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-8 print:p-3 shadow-sm print:shadow-none print:border-none">
+            <h3 className="text-lg font-bold text-gray-800 mb-6 print:mb-2 print:text-sm flex items-center gap-2">
+              <FileText size={20} className="text-blue-500 print:hidden" />
               Informações Gerais
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4 print:gap-1">
               <DisplayField label="Colaborador" value={request.user} />
               <DisplayField label="Data da Solicitação" value={request.date} />
-              <DisplayField label="Método de Pagamento" value={request.paymentMethod} />
+              {request.observation && (
+                <div className="md:col-span-2">
+                  <DisplayField label="Observação" value={request.observation} />
+                </div>
+              )}
             </div>
           </section>
 
           {/* Informações Financeiras */}
-          <section className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-8 shadow-sm print:shadow-none print:border-none">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Info size={20} className="text-purple-500" />
+          <section className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-8 print:p-3 shadow-sm print:shadow-none print:border-none print:break-inside-avoid">
+            <h3 className="text-lg font-bold text-gray-800 mb-6 print:mb-2 print:text-sm flex items-center gap-2">
+              <Info size={20} className="text-purple-500 print:hidden" />
               Informações Financeiras
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-4 print:gap-1">
               <DisplayField label="Filial" value={request.subsidiary || 'N/A'} />
               <DisplayField label="Departamento" value={request.department || 'N/A'} />
               <DisplayField label="Classe de Custo" value={request.chargeClass || 'N/A'} />
@@ -215,7 +219,7 @@ export default function RequestDetailView({
 
           {/* Dossiê de Comprovativos (Novo Layout conforme protótipo) */}
           <section className="space-y-6">
-            <div className="flex items-center gap-3 py-2 border-b border-gray-100">
+            <div className="flex items-center gap-3 py-2 border-b border-gray-100 print:break-after-avoid">
                <ImageIcon size={20} className="text-blue-500" />
                <h3 className="text-lg font-black text-gray-800 tracking-tight uppercase tracking-wider text-xs">Comprovantes</h3>
             </div>

@@ -33,6 +33,7 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
   // Estados do Formulário
   const [title, setTitle] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cartão Corporativo');
+  const [observation, setObservation] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Novos campos financeiros (Fase 2)
@@ -90,6 +91,7 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
       setCompetence(editingRequest.competence || '');
       setNfNumber(editingRequest.nfNumber || '');
       setPaymentDate(editingRequest.paymentDate || '');
+      setObservation(editingRequest.observation || '');
       
       setStep(2); // Vai direto para o formulário
     }
@@ -169,6 +171,7 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
     const newRequest: Partial<ReimbursementRequest> = {
       title,
       paymentMethod,
+      observation,
       date,
       status,
       totalValue: calculateTotal(),
@@ -279,6 +282,17 @@ export default function NewRequestView({ onBack, onSubmit, editingRequest }: New
                 />
               </div>
             </div>
+
+              <div className="md:col-span-2 mt-4">
+                <label className="block text-[10px] sm:text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Observação</label>
+                <textarea 
+                  value={observation}
+                  onChange={(e) => setObservation(e.target.value)}
+                  placeholder="Descreva o motivo ou detalhes adicionais da solicitação..." 
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300 text-sm sm:text-base font-medium resize-none"
+                />
+              </div>
             </div>
           </div>
 

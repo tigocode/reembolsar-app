@@ -54,6 +54,7 @@ export interface ReimbursementRequest {
   type: string;
   project: string;
   paymentMethod: string;
+  observation?: string;
   location: string;
   date: string;
   status: RequestStatus;
