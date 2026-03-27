@@ -187,7 +187,7 @@ export default function RequestDetailView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {request.receipts.map((receipt, index) => (
+                  {(request.receipts || []).map((receipt, index) => (
                     <tr key={receipt.id} className="group hover:bg-gray-50/50 transition-colors">
                       <td className="px-8 py-5 text-[10px] font-mono text-gray-400 uppercase">REC-{index + 1}</td>
                       <td className="px-8 py-5 text-sm font-bold text-gray-700">{receipt.merchantName || '-'}</td>
@@ -225,7 +225,7 @@ export default function RequestDetailView({
             </div>
             
             <div className="space-y-8">
-               {request.receipts.map((receipt, index) => (
+               {(request.receipts || []).map((receipt, index) => (
                  <div 
                    key={receipt.id} 
                    id={`anexo-${index + 1}`}
@@ -295,7 +295,7 @@ export default function RequestDetailView({
               Histórico
             </h3>
             <div className="relative space-y-8 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
-              {request.history.map((event, index) => (
+              {(request.history || []).map((event, index) => (
                 <div key={event.id} className="relative pl-10">
                   <div className={`absolute left-0 top-1 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center ${
                     index === 0 ? 'bg-blue-600' : 'bg-gray-300'
